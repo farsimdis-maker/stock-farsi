@@ -273,6 +273,7 @@ function close(){$('ov').classList.remove('show')}
 function exporter(){
   var csv='produit;quantite;peremption;statut\n'+lots().map(function(l){var i=info(l);return [l.n,l.q,l.d,i.k==='none'?'':i.lab].map(function(x){return '"'+String(x==null?'':x).replace(/"/g,'""')+'"'}).join(';')}).join('\n');
   if(window.Android&&Android.share){Android.share(csv);return}
+  if(navigator.share){navigator.share({title:'Stock Farsi',text:csv}).catch(function(){});return}
   $('sheet').innerHTML='<h2>Exporter</h2><div class="hint">Copie ce texte et colle-le dans Excel.</div><textarea id="ta"></textarea><div class="row"><button class="btn g" id="cancel">Fermer</button></div>';
   $('ta').value=csv;$('ov').classList.add('show');$('cancel').onclick=close;
 }
