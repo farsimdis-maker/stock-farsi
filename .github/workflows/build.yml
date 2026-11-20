@@ -1,0 +1,51 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'data/**'
+      - 'README.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Put access key in the app
+        env:
+          T: ${{ secrets.STOCK_TOKEN }}
+        run: python3 -c 'import json,os; open("app/src/main/assets/config.js","w").write("window.STOCK_TOKEN="+json.dumps(os.environ.get("T",""))+";\n")'
+
+      - name: Build
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Rename
+        run: cp app/build/outputs/apk/release/app-release.apk StockFarsi.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StockFarsi-apk
+          path: StockFarsi.apk
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ github.run_number }}" StockFarsi.apk \
+            --title "Stock Farsi v${{ github.run_number }}" \
+            --notes "Télécharge StockFarsi.apk et installe-le sur le téléphone."

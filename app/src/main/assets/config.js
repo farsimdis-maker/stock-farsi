@@ -1,0 +1,1 @@
+window.STOCK_TOKEN="";
