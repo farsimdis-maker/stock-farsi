@@ -59,6 +59,11 @@ textarea{width:100%;height:160px;font-size:12px;border:1px solid var(--line);bor
 .save{display:block;font-size:12px;opacity:.95;margin-top:2px}
 .sheet input[type=password]{font-family:monospace}
 .by{font-size:12px;color:var(--mut);margin-top:8px}
+.tabs{display:flex;gap:6px;margin-top:10px}
+.tab{flex:1;border:0;border-radius:10px;padding:9px 6px;font-size:15px;font-weight:600;background:rgba(255,255,255,.15);color:#fff;cursor:pointer}
+.tab.on{background:#fff;color:var(--pri)}
+.tab small{font-weight:400;opacity:.8;margin-left:4px}
+.sheet select{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:16px;background:#fff}
 </style>
 <script src="config.js"></script>
 </head>
@@ -77,6 +82,9 @@ var nom=lsGet('nom','');
 var base=lsGet('base',{lots:[],sha:null});   // last version from the server
 var pending=lsGet('pending',[]);            // changes not yet sent
 var syncing=false, lastErr='', filtre='tous', tri='nom', q='';
+var tab=lsGet('tab','med');
+var TABS=[['med','💊 Médicaments'],['para','🧴 Para']];
+function catOf(l){return l.cat==='para'?'para':'med'}
 
 var NOW=new Date(), nowIdx=NOW.getFullYear()*12+NOW.getMonth();
 var MOIS=['janv','févr','mars','avr','mai','juin','juil','août','sept','oct','nov','déc'];
@@ -174,6 +182,7 @@ var app=document.getElementById('app');
 app.innerHTML=
 '<header><div class="top"><div><h1>💊 Stock Farsi</h1><span class="save" id="save"></span></div>'+
 '<div><button class="icon" id="ref" aria-label="Actualiser">⟳</button> <button class="icon" id="set" aria-label="Réglages">⚙</button></div></div>'+
+'<div class="tabs" id="tabs"></div>'+
 '<input class="search" id="q" type="search" placeholder="Rechercher un produit…" autocomplete="off"></header>'+
 '<div class="chips" id="chips"></div>'+
 '<div class="bar"><span id="count"></span><select id="tri"><option value="nom">Trier : A → Z</option><option value="date">Trier : péremption</option><option value="qte">Trier : quantité</option></select></div>'+
@@ -202,7 +211,11 @@ function status(){
 
 function render(){
   status();
-  var all=lots(), c={tous:0,exp:0,'3':0,'6':0,none:0};
+  var every=lots(), tc={med:0,para:0};
+  every.forEach(function(l){tc[catOf(l)]++});
+  $('tabs').innerHTML=TABS.map(function(t){return '<button class="tab'+(tab===t[0]?' on':'')+'" data-t="'+t[0]+'">'+t[1]+'<small>'+tc[t[0]]+'</small></button>'}).join('');
+  Array.prototype.forEach.call($('tabs').children,function(b){b.onclick=function(){tab=b.dataset.t;lsSet('tab',tab);filtre='tous';render();window.scrollTo(0,0)}});
+  var all=every.filter(function(l){return catOf(l)===tab}), c={tous:0,exp:0,'3':0,'6':0,none:0};
   var rows=all.map(function(l){var i=info(l);c.tous++;if(c[i.k]!==undefined)c[i.k]++;return {l:l,i:i}});
   var F=[['tous','Tous'],['exp','🔴 Périmés'],['3','🟠 < 6 mois'],['6','🟡 6–12 mois'],['none','Sans date']];
   $('chips').innerHTML=F.map(function(f){return '<button class="chip'+(filtre===f[0]?' on':'')+'" data-f="'+f[0]+'">'+f[1]+'<b>'+c[f[0]]+'</b></button>'}).join('');
@@ -217,8 +230,8 @@ function render(){
     return a.l.n.localeCompare(b.l.n)||a.i.left-b.i.left;
   });
   $('count').textContent=v.length+' lot'+(v.length>1?'s':'');
-  if(!all.length&&!token){$('list').innerHTML='<div class="empty">Touche ⚙ en haut pour entrer la clé d\'accès.</div>';return}
-  if(!v.length){$('list').innerHTML='<div class="empty">'+(all.length?'Aucun produit trouvé.':'Chargement du stock…')+'</div>';return}
+  if(!every.length&&!token){$('list').innerHTML='<div class="empty">Touche ⚙ en haut pour entrer la clé d\'accès.</div>';return}
+  if(!v.length){$('list').innerHTML='<div class="empty">'+(every.length?'Aucun produit trouvé.':'Chargement du stock…')+'</div>';return}
   $('list').innerHTML=v.map(function(r){var l=r.l,i=r.i;
     return '<div class="item s-'+i.k+'" data-id="'+esc(l.id)+'"><div class="main"><div class="name">'+esc(l.n)+'</div>'+
     '<div class="sub">'+esc(i.txt)+'</div>'+(i.k!=='none'?'<span class="badge b-'+i.k+'">'+i.lab+'</span>':'')+'</div>'+
@@ -228,12 +241,13 @@ function render(){
 
 function openEdit(id){
   var cur=id!=null?lots().find(function(x){return String(x.id)===String(id)}):null;
-  var l=cur||{n:'',q:'',d:''};
+  var l=cur||{n:'',q:'',d:'',cat:tab};
   $('sheet').innerHTML='<h2>'+(cur?'Modifier le lot':'Nouveau lot')+'</h2>'+
   '<label>Produit</label><input id="fn" value="'+esc(l.n)+'" placeholder="ex. artelac">'+
   '<label>Quantité</label><div class="mini"><button id="mn">−</button><input id="fq" inputmode="numeric" value="'+esc(l.q)+'"><button id="pl">+</button></div>'+
   '<label>Péremption (mois/année)</label><input id="fd" value="'+esc(l.d)+'" placeholder="ex. 5/29 ou 3+5/29">'+
   '<div class="hint" id="fh"></div>'+
+  '<label>Rayon</label><select id="fc">'+TABS.map(function(t){return '<option value="'+t[0]+'"'+(catOf(l)===t[0]?' selected':'')+'>'+t[1]+'</option>'}).join('')+'</select>'+
   (cur&&cur.by?'<div class="by">Dernière modif : '+esc(cur.by)+(cur.at?' · '+new Date(cur.at).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'')+'</div>':'')+
   '<div class="row">'+(cur?'<button class="btn r" id="del">🗑</button>':'')+'<button class="btn g" id="cancel">Annuler</button><button class="btn p" id="ok">Enregistrer</button></div>';
   $('ov').classList.add('show');
@@ -248,7 +262,8 @@ function openEdit(id){
   };
   $('ok').onclick=function(){
     var n=$('fn').value.trim(); if(!n){$('fn').focus();return}
-    var lot={id:cur?cur.id:newId(),n:n,q:$('fq').value.trim(),d:$('fd').value.trim(),by:nom||'',at:Date.now()};
+    var lot=Object.assign({},cur||{},{id:cur?cur.id:newId(),n:n,q:$('fq').value.trim(),d:$('fd').value.trim(),by:nom||'',at:Date.now()});
+    if($('fc').value==='para') lot.cat='para'; else delete lot.cat;
     close(); changed({t:'set',lot:lot},cur?'Modifié':'Ajouté');
   };
   if(!cur) setTimeout(function(){$('fn').focus()},50);
@@ -271,7 +286,7 @@ function openSettings(){
 function close(){$('ov').classList.remove('show')}
 
 function exporter(){
-  var csv='produit;quantite;peremption;statut\n'+lots().map(function(l){var i=info(l);return [l.n,l.q,l.d,i.k==='none'?'':i.lab].map(function(x){return '"'+String(x==null?'':x).replace(/"/g,'""')+'"'}).join(';')}).join('\n');
+  var csv='rayon;produit;quantite;peremption;statut\n'+lots().map(function(l){var i=info(l);return [catOf(l)==='para'?'Para':'Médicaments',l.n,l.q,l.d,i.k==='none'?'':i.lab].map(function(x){return '"'+String(x==null?'':x).replace(/"/g,'""')+'"'}).join(';')}).join('\n');
   if(window.Android&&Android.share){Android.share(csv);return}
   if(navigator.share){navigator.share({title:'Stock Farsi',text:csv}).catch(function(){});return}
   $('sheet').innerHTML='<h2>Exporter</h2><div class="hint">Copie ce texte et colle-le dans Excel.</div><textarea id="ta"></textarea><div class="row"><button class="btn g" id="cancel">Fermer</button></div>';
